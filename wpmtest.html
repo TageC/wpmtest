@@ -1,0 +1,1302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WPM Test | Moss & Cream</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght=400;600;800&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        :root {
+            /* Moss & Cream Palette */
+            --bg-color: #1a261a;        /* Deep Moss */
+            --bg-panel: #253325;        /* Lighter Moss for panels */
+            --text-main: #6b7d6b;       /* Muted Sage for untyped text */
+            --text-active: #f0f2dd;     /* Cream White */
+            --primary: #e6c88b;         /* Muted Gold/Straw */
+            --error: #cc6666;           /* Muted Terra Cotta */
+            --correct: #f0f2dd;         /* Cream */
+            
+            /* UI Borders */
+            --border-color: #3a4f3a;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'JetBrains Mono', monospace;
+            overflow-x: hidden;
+            transition: background-color 0.5s ease;
+        }
+
+        /* Custom Scrollbar - Earthy Tones */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #151e15;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #3a4f3a;
+            border-radius: 4px;
+        }
+
+        .font-sans {
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Caret Animation - Vertical Bar Style (Insertion Point) */
+        .caret {
+            position: absolute;
+            width: 2px; /* Thin vertical bar */
+            height: 1.5em; /* Height of the bar */
+            background-color: var(--primary);
+            border-radius: 1px;
+            /* The 'creamy' movement logic: fast start, slow buttery settle */
+            transition: left 0.15s cubic-bezier(0.25, 1, 0.5, 1);
+            /* Use steps for traditional blinking */
+            animation: breathe-bar 1.5s infinite steps(1, start); 
+            z-index: 10;
+            box-shadow: 0 0 6px rgba(230, 200, 139, 0.5); /* Softer glow */
+            /* Position for vertical bar: translate Y to center it vertically on the line */
+            transform: translateY(-50%); 
+        }
+        
+        .is-typing .caret {
+            animation: breathe-bar 0.7s infinite steps(1, start); /* Faster blink when actively typing */
+            /* Ensure it stays at correct position when typing */
+            transform: translateY(-50%); 
+        }
+        
+        @keyframes breathe-bar {
+            0% { opacity: 1; }
+            50% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+
+        /* Character States - Smooth transitions */
+        .char {
+            position: relative;
+            transition: color 0.2s ease-out; /* Slower transition for softness */
+        }
+        .char.correct { color: var(--correct); text-shadow: 0 0 2px rgba(240, 242, 221, 0.2); }
+        .char.incorrect { color: var(--error); text-decoration: underline; text-decoration-color: var(--error); }
+        
+        /* Styling for dynamically added excess characters */
+        .char.extra-char {
+            background-color: var(--error);
+            color: var(--bg-panel); /* Dark text on error background */
+            padding: 1px 0;
+            border-radius: 2px;
+            margin-right: 0px; 
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Onboarding Hint Pulse */
+        #tab-hint-tooltip {
+            animation: hintPulse 2s infinite ease-in-out;
+        }
+        @keyframes hintPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        #hidden-input {
+            position: absolute;
+            opacity: 0;
+            top: 0;
+            left: 0;
+            height: 0;
+            width: 0;
+            z-index: -1;
+        }
+        
+        #words-wrapper {
+            position: relative;
+            /* Height for a single line of text plus some padding */
+            height: 90px; 
+            overflow: hidden; 
+        }
+
+        #word-container {
+            position: absolute;
+            /* **NEW**: Change transition from 'top' to 'left' for horizontal scrolling */
+            transition: left 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+            /* **NEW**: Force all content onto a single line */
+            white-space: nowrap; 
+            /* **NEW**: Vertically center the text within the wrapper */
+            top: 50%;
+            transform: translateY(-50%);
+            left: 0px; /* Start position for horizontal scroll */
+
+            /* Original text sizing and styling */
+            font-size: 1.5rem; /* text-2xl */
+            line-height: 2rem; /* leading-relaxed */
+            /* Tailwind classes for reference: text-2xl md:text-3xl leading-relaxed break-words text-justify select-none outline-none */
+            break-words: none; /* Override break-words for single line */
+            text-align: left; /* Use left alignment */
+            user-select: none;
+            outline: none;
+        }
+
+        .word {
+            margin-right: 0.6em;
+            /* Must be inline-block or similar to flow on one line */
+            display: inline-block; 
+            /* Remove margin-bottom from previous multi-line layout */
+        }
+        
+        /* --- START FIX FOR DROPDOWN --- */
+        /* Explicitly set appearance to auto to ensure the native dropdown arrow is drawn and clickable */
+        #lang-select {
+            -webkit-appearance: auto;
+            -moz-appearance: auto;
+            appearance: auto;
+            /* Use Inter font for better UI look */
+            font-family: 'Inter', sans-serif; 
+            font-weight: 500;
+        }
+        /* --- END FIX FOR DROPDOWN --- */
+        
+        /* Utility overrides for Tailwind to match theme */
+        .text-theme-main { color: var(--text-main); }
+        .text-theme-active { color: var(--text-active); }
+        .text-theme-primary { color: var(--primary); }
+        .bg-theme-panel { background-color: var(--bg-panel); }
+        .border-theme { border-color: var(--border-color); }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center selection:bg-[#3a4f3a] selection:text-[#f0f2dd]" onclick="focusInput(event)">
+
+    <!-- Navbar -->
+    <nav class="w-full max-w-5xl px-6 py-8 flex justify-between items-end font-sans">
+        <div class="flex items-center gap-3">
+            <svg class="w-8 h-8 text-[#e6c88b]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+            <div>
+                <h1 class="text-2xl font-bold text-[#f0f2dd] tracking-tight leading-none" id="ui-title">WPM Test</h1>
+                <p class="text-xs text-[#6b7d6b] font-medium tracking-wide mt-1" id="ui-subtitle">MOSS & CREAM</p>
+            </div>
+        </div>
+        
+        <!-- Live Stats (Top Right) - Now includes Accuracy -->
+        <div class="flex gap-8 opacity-0 transition-opacity duration-300" id="live-stats-container">
+            <div class="text-right">
+                <div class="text-xs text-[#6b7d6b] font-bold uppercase tracking-wider" id="ui-time-label">Time</div>
+                <div class="text-4xl text-[#f0f2dd]" id="live-timer">30</div>
+            </div>
+            <div class="text-right">
+                <div class="text-xs text-[#6b7d6b] font-bold uppercase tracking-wider" id="ui-wpm-label">WPM</div>
+                <div class="text-4xl text-[#f0f2dd]" id="live-wpm">0</div>
+            </div>
+            <div class="text-right">
+                <div class="text-xs text-[#6b7d6b] font-bold uppercase tracking-wider" id="ui-acc-label">Acc</div>
+                <div class="text-4xl text-[#f0f2dd]" id="live-acc">100%</div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Configuration Bar -->
+    <div class="w-full max-w-5xl px-6 mb-12 fade-in transition-opacity duration-200" id="config-bar">
+        <div class="bg-[#253325]/80 backdrop-blur-sm rounded-lg p-2 inline-flex flex-wrap gap-2 text-sm text-[#6b7d6b] border border-[#3a4f3a]/50 shadow-lg">
+            
+            <!-- Language Selector (Dropdown) - FIXED FUNCTIONALITY AND MATCHED BACKGROUND COLOR -->
+            <div class="flex items-center rounded p-1 gap-1">
+                <label for="lang-select" class="text-xs font-medium uppercase tracking-wider text-[#6b7d6b] ml-2" id="ui-lang-label">Lang:</label>
+                <!-- **FIXED:** Removed custom-select-wrapper and applied all styling directly to the select for full native clickability -->
+                <select id="lang-select" onchange="setLanguage(this.value)" class="py-1 pl-3 pr-4 text-base transition-colors bg-[#253325] text-[#f0f2dd] rounded cursor-pointer">
+                    <option value="en">English (EN)</option>
+                    <option value="es">Spanish (ES)</option>
+                    <option value="hi">Hindi (HI)</option>
+                    <option value="fr">French (FR)</option>
+                    <option value="zh">Mandarin (ZH)</option>
+                </select>
+            </div>
+            
+            <div class="w-px bg-[#3a4f3a] my-1 hidden sm:block"></div>
+
+            <!-- Source Selection -->
+            <div class="flex bg-[#1a261a]/50 rounded p-1 gap-1">
+                <button onclick="setSource('words')" class="source-btn px-3 py-1 rounded transition-colors" id="btn-source-words">Words</button>
+                <button onclick="setSource('literature')" class="source-btn px-3 py-1 rounded transition-colors hover:bg-[#3a4f3a] hover:text-[#f0f2dd]" id="btn-source-literature">Literature</button>
+                <button onclick="setSource('code')" class="source-btn px-3 py-1 rounded transition-colors hover:bg-[#3a4f3a] hover:text-[#f0f2dd]" id="btn-source-code">Code</button>
+            </div>
+            
+            <div class="w-px bg-[#3a4f3a] my-1 hidden sm:block"></div>
+
+            <!-- Time -->
+            <div class="flex bg-[#1a261a]/50 rounded p-1 gap-1">
+                <button onclick="setTime(15)" class="time-btn px-3 py-1 rounded transition-colors hover:bg-[#3a4f3a] hover:text-[#f0f2dd]" id="btn-time-15">15s</button>
+                <button onclick="setTime(30)" class="time-btn px-3 py-1 rounded transition-colors" id="btn-time-30">30s</button>
+                <button onclick="setTime(60)" class="time-btn px-3 py-1 rounded transition-colors hover:bg-[#3a4f3a] hover:text-[#f0f2dd]" id="btn-time-60">60s</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Typing Area -->
+    <main class="flex-grow w-full max-w-5xl px-6 relative flex flex-col justify-center mb-20 z-10">
+        
+        <!-- Focus Overlay -->
+        <div id="focus-overlay" class="absolute inset-0 z-20 flex items-center justify-center bg-[#1a261a]/80 backdrop-blur-sm transition-opacity duration-500 cursor-pointer" onclick="focusInput(event)">
+            <div class="text-[#f0f2dd] text-lg font-sans flex items-center gap-2 animate-pulse">
+                <svg class="w-5 h-5 text-[#e6c88b]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/></svg>
+                <span id="ui-focus-hint">Click or Press Any Key to Focus</span>
+            </div>
+        </div>
+
+        <!-- **MODIFIED**: Height is now fixed for a single line of text -->
+        <div class="relative w-full h-[90px] overflow-hidden" id="words-wrapper">
+            <div id="caret" class="caret hidden"></div>
+            <!-- **MODIFIED**: Removed classes that imply multiline layout -->
+            <div id="word-container" class="text-2xl md:text-3xl leading-relaxed select-none outline-none" style="left: 0px;">
+                <!-- Words injected via JS -->
+            </div>
+        </div>
+
+        <!-- Restart Hint & Onboarding Tip -->
+        <div class="mt-12 flex flex-col items-center gap-2 fade-in" id="restart-hint-container">
+            <div id="tab-hint-tooltip" class="text-sm font-sans px-3 py-1 rounded-full bg-[#e6c88b]/10 text-[#e6c88b] transition-opacity duration-300 hidden">
+                Psst! Press 'Tab' to quickly reset!
+            </div>
+            <button onclick="resetTest()" class="group flex items-center gap-2 text-[#6b7d6b] transition-colors duration-300 px-3 py-1 rounded-lg hover:bg-[#253325] hover:text-[#f0f2dd]">
+                <svg class="w-4 h-4 group-hover:rotate-180 transition-transform duration-700 cubic-bezier(0.25, 1, 0.5, 1)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                <span class="font-sans text-base font-medium" id="ui-restart-hint">Restart Test (Tab)</span>
+            </button>
+        </div>
+
+        <!-- Hidden Input for Mobile/Focus capture -->
+        <input type="text" id="hidden-input" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </main>
+
+    <!-- Results Modal -->
+    <div id="results-modal" class="fixed inset-0 z-50 bg-[#1a261a]/95 backdrop-blur-md hidden flex items-center justify-center p-4 transition-all duration-500">
+        <div class="bg-[#253325] rounded-xl border border-[#3a4f3a] w-full max-w-4xl p-8 shadow-2xl transform scale-95 opacity-0 transition-all duration-500 cubic-bezier(0.25, 1, 0.5, 1)" id="results-content">
+            <div class="flex justify-between items-start mb-8">
+                <div>
+                    <h2 class="text-3xl font-bold text-[#f0f2dd] font-sans" id="res-title">Test Results</h2>
+                    <p class="text-[#6b7d6b] mt-1" id="result-mode-text">Standard Mode - 30s</p>
+                </div>
+                <button onclick="closeResults()" class="text-[#6b7d6b] hover:text-[#f0f2dd] transition-colors">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div class="bg-[#1a261a]/50 p-6 rounded-lg border border-[#3a4f3a]/50 flex flex-col items-start justify-center">
+                    <div class="text-sm text-[#6b7d6b] font-bold uppercase tracking-wider mb-1" id="res-wpm-label">WPM</div>
+                    <div class="text-5xl font-bold text-[#e6c88b]" id="res-wpm">0</div>
+                    <div class="text-xs text-[#e6c88b]/60 mt-2 font-mono" id="res-raw-label">Raw: <span id="res-raw">0</span></div>
+                </div>
+                <div class="bg-[#1a261a]/50 p-6 rounded-lg border border-[#3a4f3a]/50 flex flex-col items-start justify-center">
+                    <div class="text-sm text-[#6b7d6b] font-bold uppercase tracking-wider mb-1" id="res-acc-label">Accuracy</div>
+                    <div class="text-5xl font-bold text-[#f0f2dd]" id="res-acc">0%</div>
+                </div>
+                <div class="bg-[#1a261a]/50 p-6 rounded-lg border border-[#3a4f3a]/50 flex flex-col items-start justify-center">
+                    <div class="text-sm text-[#6b7d6b] font-bold uppercase tracking-wider mb-1" id="res-char-label">Characters</div>
+                    <div class="text-3xl font-bold text-white flex items-baseline gap-2">
+                        <span class="text-[#f0f2dd]" id="res-char-correct">0</span>
+                        <span class="text-[#6b7d6b]">/</span>
+                        <span class="text-[#cc6666]" id="res-char-wrong">0</span>
+                    </div>
+                </div>
+                <div class="bg-[#1a261a]/50 p-6 rounded-lg border border-[#3a4f3a]/50 flex flex-col items-start justify-center">
+                    <div class="text-sm text-[#6b7d6b] font-bold uppercase tracking-wider mb-1" id="res-con-label">Consistency</div>
+                    <div class="text-5xl font-bold text-[#a3b18a]" id="res-con">--%</div>
+                </div>
+            </div>
+
+            <!-- Chart -->
+            <div class="w-full h-48 bg-[#1a261a]/30 rounded-lg p-4 border border-[#3a4f3a]/30 mb-8">
+                <canvas id="wpmChart"></canvas>
+            </div>
+
+            <div class="flex justify-center gap-4">
+                <button onclick="closeResults()" class="bg-[#e6c88b] hover:bg-[#d4b483] text-[#1a261a] font-bold py-3 px-8 rounded-lg transition-all transform hover:scale-105 shadow-lg shadow-[#e6c88b]/20 font-sans" id="ui-start-new-button">
+                    Start New Test
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="w-full text-center py-6 text-[#4a5d4a] text-sm font-sans">
+        <p>&copy; 2023 WPM Test. Built with focus & speed.</p>
+    </footer>
+
+    <script>
+        // --- DATA ---
+        const WORD_LIST = [
+            "the", "be", "of", "and", "a", "to", "in", "he", "have", "it", "that", "for", "they", "with", "as", "not", "on", "she", "at", "by", "this", "we", "you", "do", "but", "from", "or", "which", "one", "would", "all", "will", "there", "say", "who", "make", "when", "can", "more", "if", "no", "man", "out", "other", "so", "what", "time", "up", "go", "about", "than", "into", "could", "state", "only", "new", "year", "some", "take", "come", "these", "know", "see", "use", "get", "like", "then", "first", "any", "work", "now", "may", "such", "give", "over", "think", "most", "even", "find", "day", "also", "after", "way", "many", "must", "look", "before", "great", "back", "through", "long", "where", "much", "should", "well", "people", "down", "own", "just", "because", "good", "each", "those", "feel", "seem", "how", "high", "too", "place", "little", "world", "very", "still", "nation", "hand", "old", "life", "tell", "write", "become", "here", "show", "house", "both", "between", "need", "mean", "call", "develop", "under", "last", "right", "move", "thing", "general", "school", "never", "same", "another", "begin", "while", "number", "part", "turn", "real", "leave", "might", "want", "point", "form", "off", "child", "few", "small", "since", "against", "ask", "late", "home", "interest", "large", "person", "end", "open", "public", "follow", "during", "present", "without", "again", "hold", "govern", "around", "possible", "head", "consider", "word", "program", "problem", "however", "lead", "system", "set", "order", "eye", "plan", "run", "keep", "face", "fact", "group", "play", "stand", "increase", "early", "course", "change", "help", "line"
+        ];
+
+        const LITERATURE_EXCERPTS = [
+            "To be, or not to be, that is the question: Whether 'tis nobler in the mind to suffer the slings and arrows of outrageous fortune, or to take arms against a sea of troubles and by opposing end them.",
+            "All that glitters is not gold; often have you heard that told. Many a man his life hath sold but my outside to behold. Gilded tombs do worms infold. Had you been as wise as bold.",
+            "A journey of a thousand miles begins with a single step. Even the longest and most difficult ventures have a starting point.",
+            "In the middle of difficulty lies opportunity. Where there is strife, there is a chance for change and growth.",
+            "It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness, it was the epoch of belief, it was the epoch of incredulity.",
+            "Call me Ishmael. Some years ago—never mind how long precisely—having little or no money in my purse, and nothing particular to interest me on shore, I thought I would sail about a little.",
+            "The quick brown fox jumps over the lazy dog."
+        ];
+        
+        const CODING_SNIPPETS = [
+            "def calculate_wpm(correct_chars, time_elapsed_minutes): return round((correct_chars / 5) / time_elapsed_minutes)",
+            "const app = initializeApp(firebaseConfig); const db = getFirestore(app);",
+            "let user_data = JSON.parse(localStorage.getItem('user_data') || '{}');",
+            "for (let i = 0; i < array.length; i++) { console.log(array[i]); }",
+            "class TypingTest { constructor(words) { this.words = words; } }",
+            "if (state.totalTyped > 0) { const accuracy = Math.round((state.correctChars / state.totalTyped) * 100); }",
+            "import { useEffect, useState } from 'react'; function App() { return <div>Hello World</div>; }",
+            "const payload = { contents: [{ parts: [{ text: userQuery }] }], tools: [{ 'google_search': {} }] };"
+        ];
+        
+        // --- SPANISH DATA ---
+        const ES_WORD_LIST = [
+            "el", "ser", "de", "y", "un", "a", "en", "él", "tener", "eso", "que", "para", "ellos", "con", "como", "no", "en", "ella", "a", "por", "este", "nosotros", "tú", "hacer", "pero", "desde", "o", "cual", "uno", "haría", "todo", "voluntad", "allí", "decir", "quién", "hacer", "cuando", "poder", "más", "si", "no", "hombre", "fuera", "otro", "tan", "qué", "tiempo", "arriba", "ir", "acerca", "que", "en", "podría", "estado", "solo", "nuevo", "año", "algunos", "tomar", "venir", "estos", "saber", "ver", "usar", "obtener", "como", "luego", "primero", "cualquier", "trabajo", "ahora", "mayo", "tal", "dar", "encima", "pensar", "más", "incluso", "encontrar", "día", " también", "después", "camino", "muchos", "deber", "mirar", "antes", "genial", "espalda", "a través", "largo", "donde", "mucho", "debería", "bien", "personas", "abajo", "propio", "solo", "porque", "bueno", "cada", "esos", "sentir", "parecer", "cómo", "alto", "demasiado", "lugar", "pequeño", "mundo", "muy", "todavía", "nación", "mano", "viejo", "vida", "decir", "escribir", "convertirse", "aquí", "mostrar", "casa", "ambos", "entre", "necesitar", "significar", "llamar", "desarrollar", "bajo", "último", "derecho", "moverse", "cosa", "general", "escuela", "nunca", "mismo", "otro", "empezar", "mientras", "número", "parte", "girar", "real", "salir", "podría", "querer", "punto", "forma", "apagado", "niño", "pocos", "pequeño", "desde", "contra", "preguntar", "tarde", "casa", "interés", "grande", "persona", "fin", "abierto", "público", "seguir", "durante", "presente", "sin", "otra vez", "sostener", "gobernar", "alrededor", "posible", "cabeza", "considerar", "palabra", "programa", "problema", "sin embargo", "dirigir", "sistema", "conjunto", "orden", "ojo", "plan", "correr", "mantener", "cara", "hecho", "grupo", "jugar", "estar", "aumentar", "temprano", "curso", "cambio", "ayuda", "línea"
+        ];
+
+        const ES_LITERATURE_EXCERPTS = [
+            "Ser o no ser, esa es la cuestión: si es más noble para la mente sufrir las flechas y golpes de la fortuna ultrajante, o tomar las armas contra un mar de problemas y, al oponerse, ponerles fin.",
+            "No es oro todo lo que reluce; a menudo te han dicho eso. Muchos hombres han vendido su vida solo para contemplar mi exterior. Las tumbas doradas encierran gusanos. Si hubieras sido tan sabio como audaz.",
+            "Un viaje de mil millas comienza con un solo paso. Incluso las empresas más largas y difíciles tienen un punto de partida.",
+            "En medio de la dificultad reside la oportunidad. Donde hay contienda, hay una posibilidad de cambio y crecimiento.",
+            "Era el mejor de los tiempos, era el peor de los tiempos, era la edad de la sabiduría, era la edad de la locura, era la época de la creencia, era la época de la incredulidad.",
+            "Llamadme Ismael. Hace algunos años —no importa cuánto hace exactamente— teniendo poco o ningún dinero en mi bolsillo, y nada en particular que me interesara en tierra, pensé que navegaría un poco.",
+            "El rápido zorro marrón salta sobre el perro perezoso."
+        ];
+        
+        const CODING_SNIPPETS_ES = [
+            "función calcularWPM(caracteres_correctos, tiempo_transcurrido_minutos) { retornar redondear((caracteres_correctos / 5) / tiempo_transcurrido_minutos) }",
+            "const app = inicializarApp(configFirebase); const db = obtenerBaseDatos(app);",
+            "let datos_usuario = JSON.parse(localStorage.getItem('datos_usuario') || '{}');",
+            "para (let i = 0; i < array.longitud; i++) { consola.log(array[i]); }",
+            "clase PruebaMecanografía { constructor(palabras) { this.palabras = palabras; } }",
+            "si (estado.totalEscrito > 0) { const precision = Math.round((estado.caracteresCorrectos / estado.totalEscrito) * 100); }",
+            "importar { usarEfecto, usarEstado } desde 'reaccionar'; funcion App() { retornar <div>Hola Mundo</div>; }",
+            "const carga = { contenido: [{ partes: [{ texto: consultaUsuario }] }], herramientas: [{ 'busqueda_google': {} }] };"
+        ];
+        
+        // --- HINDI DATA (hi) ---
+        const HI_WORD_LIST = ["और", "यह", "है", "नहीं", "एक", "मेरा", "आप", "क्या", "हम", "वहाँ", "जाना", "आना", "समय", "पानी", "खाना", "कल", "आज", "नाम", "शहर", "लोग", "सूर्य", "रात", "दिन", "घर", "पहाड़", "नदी", "प्यार", "किताब", "काम", "आवाज"];
+        const HI_LITERATURE_EXCERPTS = [
+            "असफलता ही सफलता की नींव है। अगर आप असफल होते हैं, तो इसका मतलब है कि आप कोशिश कर रहे हैं।",
+            "कर्मण्येवाधिकारस्ते मा फलेषु कदाचन। मा कर्मफलहेतुर्भूर्मा ते सङ्गोऽस्त्वकर्मणि॥",
+            "सत्यमेव जयते। सत्य की ही जीत होती है।"
+        ];
+        const HI_CODING_SNIPPETS = [
+            "यदि (आयु > 18) { प्रिंट(वयस्क); }", 
+            "गिनती_शून्य से शुरू होती है।", 
+            "ट्राई { गणना } कैच (त्रुटि) { दिखाओ(त्रुटि) }",
+            "चक्र (i = 0; i < 10; i++) { योग = योग + i; }"
+        ];
+
+        // --- FRENCH DATA (fr) ---
+        const FR_WORD_LIST = ["le", "la", "un", "une", "être", "avoir", "je", "tu", "il", "elle", "nous", "vous", "ils", "plus", "tout", "faire", "dire", "aimer", "main", "temps", "eau", "manger", "dormir", "parler", "ville", "nuit", "jour", "soleil", "lune", "lire"];
+        const FR_LITERATURE_EXCERPTS = [
+            "La vie est un mystère qu'il faut vivre, et non un problème à résoudre.", 
+            "Tous pour un, un pour tous.", 
+            "Vivre, c'est passer d'un espace à un autre, en essayant de ne pas trop se cogner."
+        ];
+        const FR_CODING_SNIPPETS = [
+            "si (age > 18) { afficher('adulte'); }", 
+            "compteur commence à zéro.", 
+            "essaie { calcul } attrape (erreur) { montre(erreur) }",
+            "pour (let i = 0; i < 10; i++) { somme = somme + i; }"
+        ];
+
+        // --- MANDARIN DATA (zh) ---
+        const ZH_WORD_LIST = ["的", "是", "一", "不", "人", "我", "有", "他", "这", "在", "来", "去", "大", "小", "中", "国", "家", "学", "生", "说", "水", "吃", "睡觉", "城市", "山", "河", "爱", "书", "工作", "声音"];
+        const ZH_LITERATURE_EXCERPTS = [
+            "一寸光阴一寸金，寸金难买寸光阴。", 
+            "知行合一。 (Knowledge and action are one.)", 
+            "不鸣则已, 一鸣惊人。 (Silence gives way to a single, shocking sound.)"
+        ];
+        const ZH_CODING_SNIPPETS = [
+            "如果 (年龄 > 18) { 打印(成人); }", 
+            "计数器从零开始。", 
+            "尝试 { 计算 } 捕获 (错误) { 显示(错误) }",
+            "循环 (让 i = 0; i < 10; i++) { 总和 = 总和 + i; }"
+        ];
+
+        // --- TRANSLATIONS MAP ---
+        const TRANSLATIONS = {
+            'en': {
+                title: "WPM Test",
+                subtitle: "MOSS & CREAM",
+                lang: "Lang",
+                time: "Time",
+                wpm: "WPM",
+                acc: "Acc",
+                source: "Source",
+                words: "Words",
+                literature: "Literature",
+                code: "Code",
+                focusHint: "Click or Press Any Key to Focus",
+                restartHint: "Restart Test (Tab)",
+                resultsTitle: "Test Results",
+                rawWpm: "Raw",
+                accuracy: "Accuracy",
+                characters: "Characters",
+                consistency: "Consistency",
+                startNew: "Start New Test",
+                tabHintTooltip: "Psst! Press 'Tab' to quickly reset!",
+                sourceModeText: (source, time) => `${source.charAt(0).toUpperCase() + source.slice(1)} Source - ${time}s`
+            },
+            'es': {
+                title: "Prueba de PPM",
+                subtitle: "MUSGO Y CREMA",
+                lang: "Idioma",
+                time: "Tiempo",
+                wpm: "PPM",
+                acc: "Prec",
+                source: "Fuente",
+                words: "Palabras",
+                literature: "Literatura",
+                code: "Código",
+                focusHint: "Haz clic o Pulsa una tecla para enfocar",
+                restartHint: "Reiniciar Prueba (Tab)",
+                resultsTitle: "Resultados de la Prueba",
+                rawWpm: "Bruto",
+                accuracy: "Precisión",
+                characters: "Caracteres",
+                consistency: "Consistencia",
+                startNew: "Iniciar Nueva Prueba",
+                tabHintTooltip: "¡Oye! ¡Pulsa 'Tab' para reiniciar rápido!",
+                sourceModeText: (source, time) => `Fuente ${source.charAt(0).toUpperCase() + source.slice(1)} - ${time}s`
+            },
+            'hi': {
+                title: "डब्ल्यूपीएम टेस्ट",
+                subtitle: "काई और क्रीम",
+                lang: "भाषा",
+                time: "समय",
+                wpm: "डब्ल्यूपीएम",
+                acc: "सटीकता",
+                source: "स्रोत",
+                words: "शब्द",
+                literature: "साहित्य",
+                code: "कोड",
+                focusHint: "ध्यान केंद्रित करने के लिए क्लिक करें या कोई भी कुंजी दबाएं",
+                restartHint: "पुनः प्रारंभ करें (Tab)",
+                resultsTitle: "परीक्षा परिणाम",
+                rawWpm: "कच्चा",
+                accuracy: "सटीकता",
+                characters: "अक्षर",
+                consistency: "संगति",
+                startNew: "नई परीक्षा शुरू करें",
+                tabHintTooltip: "Psst! जल्दी से रीसेट करने के लिए 'Tab' दबाएं!",
+                sourceModeText: (source, time) => `${source.charAt(0).toUpperCase() + source.slice(1)} स्रोत - ${time}s`
+            },
+            'fr': {
+                title: "Test de MPM",
+                subtitle: "MOUSSE ET CRÈME",
+                lang: "Langue",
+                time: "Temps",
+                wpm: "MPM",
+                acc: "Préc",
+                source: "Source",
+                words: "Mots",
+                literature: "Littérature",
+                code: "Code",
+                focusHint: "Cliquez ou appuyez sur n'importe quelle touche pour vous concentrar",
+                restartHint: "Redémarrer le test (Tab)",
+                resultsTitle: "Résultats du Test",
+                rawWpm: "Brut",
+                accuracy: "Précision",
+                characters: "Caractères",
+                consistency: "Cohérence",
+                startNew: "Démarrer un Nouveau Test",
+                tabHintTooltip: "Psst! Appuyez sur 'Tab' pour réinitialiser rapidement!",
+                sourceModeText: (source, time) => `Source ${source.charAt(0).toUpperCase() + source.slice(1)} - ${time}s`
+            },
+            'zh': {
+                title: "输入速度测试",
+                subtitle: "苔藓与奶油",
+                lang: "语言",
+                time: "时间",
+                wpm: "速度",
+                acc: "准确率",
+                source: "来源",
+                words: "词汇",
+                literature: "文学",
+                code: "代码",
+                focusHint: "点击或按任意键聚焦",
+                restartHint: "重新开始测试 (Tab)",
+                resultsTitle: "测试结果",
+                rawWpm: "原始",
+                accuracy: "准确率",
+                characters: "字符数",
+                consistency: "一致性",
+                startNew: "开始新测试",
+                tabHintTooltip: "提示! 按 'Tab' 快速重置!",
+                sourceModeText: (source, time) => `${source} 来源 - ${time}s`
+            }
+        };
+
+
+        // --- STATE ---
+        let config = {
+            source: 'words', // 'words', 'literature', or 'code'
+            time: 30,
+            language: localStorage.getItem('wpm_language') || 'en' // New language state
+        };
+
+        let state = {
+            isRunning: false,
+            timeLeft: 30,
+            words: [],
+            wordIndex: 0,
+            charIndex: 0,
+            correctChars: 0,
+            incorrectChars: 0, // Now explicitly tracked and used in global recalculation
+            totalTyped: 0,
+            intervalId: null,
+            startTime: null,
+            history: [], // {time: number, wpm: number}
+            wordStats: [] 
+        };
+        
+        let wpmChart = null;
+        let lastHistoryTime = 0; // Tracks when the WPM was last pushed to history (in seconds)
+        let tabHintDismissed = localStorage.getItem('wpm_tab_hint_dismissed') === 'true'; // Hint state
+
+        // --- DOM ELEMENTS ---
+        const els = {
+            wordContainer: document.getElementById('word-container'),
+            input: document.getElementById('hidden-input'),
+            timer: document.getElementById('live-timer'),
+            wpm: document.getElementById('live-wpm'),
+            acc: document.getElementById('live-acc'), 
+            statsContainer: document.getElementById('live-stats-container'),
+            configBar: document.getElementById('config-bar'),
+            focusOverlay: document.getElementById('focus-overlay'),
+            caret: document.getElementById('caret'),
+            wordsWrapper: document.getElementById('words-wrapper'),
+            resultsModal: document.getElementById('results-modal'),
+            resultsContent: document.getElementById('results-content'),
+            resultModeText: document.getElementById('result-mode-text'),
+            resWpm: document.getElementById('res-wpm'),
+            resRaw: document.getElementById('res-raw'),
+            resAcc: document.getElementById('res-acc'),
+            resCharCorrect: document.getElementById('res-char-correct'),
+            resCharWrong: document.getElementById('res-char-wrong'),
+            resCon: document.getElementById('res-con'),
+            // UI elements for translation
+            uiTitle: document.getElementById('ui-title'),
+            uiSubtitle: document.getElementById('ui-subtitle'),
+            uiTimeLabel: document.getElementById('ui-time-label'),
+            uiWpmLabel: document.getElementById('ui-wpm-label'),
+            uiAccLabel: document.getElementById('ui-acc-label'),
+            uiFocusHint: document.getElementById('ui-focus-hint'),
+            uiRestartHint: document.getElementById('ui-restart-hint'),
+            resTitle: document.getElementById('res-title'),
+            resWpmLabel: document.getElementById('res-wpm-label'),
+            resRawLabel: document.getElementById('res-raw-label'),
+            resAccLabel: document.getElementById('res-acc-label'),
+            resCharLabel: document.getElementById('res-char-label'),
+            resConLabel: document.getElementById('res-con-label'),
+            uiStartNewButton: document.getElementById('ui-start-new-button'),
+            tabHintTooltip: document.getElementById('tab-hint-tooltip'),
+            langSelect: document.getElementById('lang-select'), // New: Select element
+            uiLangLabel: document.getElementById('ui-lang-label') // New: Lang label
+        };
+        
+        // --- TRANSLATION HELPER ---
+        function getT(key, ...args) {
+            // Fallback to English if translation is missing
+            const translation = TRANSLATIONS[config.language][key] || TRANSLATIONS['en'][key];
+            if (typeof translation === 'function') {
+                return translation(...args);
+            }
+            return translation;
+        }
+
+        // --- INIT & CONFIG ---
+        function init() {
+            // Ensure the initial language from config is selected in the dropdown
+            els.langSelect.value = config.language;
+            
+            renderConfig();
+            renderUI(); // Initial UI rendering
+            resetTest();
+            
+            // Event Listeners
+            els.input.addEventListener('beforeinput', handleBeforeInput); 
+            els.input.addEventListener('input', handleInput);
+            document.addEventListener('keydown', (e) => {
+                if(e.key === 'Tab') {
+                    e.preventDefault();
+                    resetTest();
+                }
+                // Focus on keypress if not already focused
+                if (!state.isRunning && !els.resultsModal.classList.contains('flex')) {
+                   els.input.focus();
+                }
+            });
+            
+            // Focus handling
+            els.input.addEventListener('focus', () => {
+                els.focusOverlay.classList.add('opacity-0', 'pointer-events-none');
+                els.caret.classList.remove('hidden');
+                // Hide the tab hint once the user interacts
+                els.tabHintTooltip.classList.add('hidden');
+            });
+            els.input.addEventListener('blur', () => {
+                if(!state.isRunning) return;
+                els.focusOverlay.classList.remove('opacity-0', 'pointer-events-none');
+                els.caret.classList.add('hidden');
+            });
+            
+            // Initial caret position update to center it vertically
+            requestAnimationFrame(updateCaretPosition);
+            
+            showTabHint();
+        }
+        
+        function setLanguage(lang) {
+            config.language = lang;
+            localStorage.setItem('wpm_language', lang);
+            renderUI();
+            // Note: renderConfig is called here implicitly by renderUI for buttons
+            resetTest();
+        }
+
+        function setSource(source) {
+            config.source = source;
+            renderConfig();
+            resetTest();
+        }
+
+        function setTime(time) {
+            config.time = time;
+            renderConfig();
+            resetTest();
+        }
+
+        function renderUI() {
+            // Navbar
+            els.uiTitle.innerText = getT('title');
+            els.uiSubtitle.innerText = getT('subtitle');
+            els.uiTimeLabel.innerText = getT('time');
+            els.uiWpmLabel.innerText = getT('wpm');
+            els.uiAccLabel.innerText = getT('acc');
+            els.uiLangLabel.innerText = getT('lang') + ':'; // New language label
+
+            // Config buttons (Source is handled by renderConfig)
+            document.getElementById('btn-source-words').innerText = getT('words');
+            document.getElementById('btn-source-literature').innerText = getT('literature');
+            document.getElementById('btn-source-code').innerText = getT('code');
+            
+            // Main Area
+            els.uiFocusHint.innerText = getT('focusHint');
+            els.uiRestartHint.innerText = getT('restartHint');
+            els.tabHintTooltip.innerText = getT('tabHintTooltip');
+
+            // Results Modal
+            els.resTitle.innerText = getT('resultsTitle');
+            els.resWpmLabel.innerText = getT('wpm');
+            // Re-render raw label with current translation, preserving the value
+            const currentRawValue = els.resRaw.innerText;
+            els.resRawLabel.innerHTML = `${getT('rawWpm')}: <span id="res-raw">${currentRawValue}</span>`; 
+            els.resAccLabel.innerText = getT('accuracy');
+            els.resCharLabel.innerText = getT('characters');
+            els.resConLabel.innerText = getT('consistency');
+            els.uiStartNewButton.innerText = getT('startNew');
+
+            // Update mode text placeholder
+            const sourceText = getT(config.source);
+            els.resultModeText.innerText = getT('sourceModeText', sourceText, config.time);
+            
+            renderConfig(); // Call to re-highlight buttons
+        }
+
+
+        function renderConfig() {
+            // Language: Set selected value in dropdown (already done in setLanguage/init)
+            
+            // Update Source buttons
+            ['words', 'literature', 'code'].forEach(s => {
+                const btn = document.getElementById(`btn-source-${s}`);
+                if (config.source === s) {
+                    btn.className = "source-btn px-3 py-1 rounded transition-colors bg-[#e6c88b]/20 text-[#e6c88b] font-medium";
+                } else {
+                    btn.className = "source-btn px-3 py-1 rounded transition-colors hover:bg-[#3a4f3a] hover:text-[#f0f2dd] text-[#6b7d6b]";
+                }
+            });
+            
+            // Update Time buttons
+            [15, 30, 60].forEach(t => {
+                const btn = document.getElementById(`btn-time-${t}`);
+                if (config.time === t) {
+                    btn.className = "time-btn px-3 py-1 rounded transition-colors bg-[#e6c88b]/20 text-[#e6c88b] font-medium";
+                } else {
+                    btn.className = "time-btn px-3 py-1 rounded transition-colors hover:bg-[#3a4f3a] hover:text-[#f0f2dd] text-[#6b7d6b]";
+                }
+            });
+        }
+
+        // --- FIXED: Focus function now checks if the click originated from an interactive element ---
+        function focusInput(event) {
+            if (event) {
+                const target = event.target;
+                const tagName = target.tagName;
+                
+                // If the click is on the select element, or within the config bar container, do nothing (to allow native UI to function)
+                if (tagName === 'SELECT' || tagName === 'BUTTON' || tagName === 'A' || target.closest('#config-bar')) {
+                    return;
+                }
+            }
+            
+            els.input.focus();
+        }
+        
+        function showTabHint() {
+             if (!tabHintDismissed) {
+                els.tabHintTooltip.classList.remove('hidden');
+            }
+        }
+        
+        function dismissTabHint() {
+            if (!tabHintDismissed) {
+                tabHintDismissed = true;
+                localStorage.setItem('wpm_tab_hint_dismissed', 'true');
+                els.tabHintTooltip.classList.add('hidden');
+            }
+        }
+
+        // --- GAME LOGIC ---
+        function resetTest() {
+            // Stop logic
+            clearInterval(state.intervalId);
+            state.isRunning = false;
+            
+            // Reset state
+            state.timeLeft = config.time;
+            state.wordIndex = 0;
+            state.charIndex = 0;
+            state.correctChars = 0;
+            state.incorrectChars = 0; // Resetting here
+            state.totalTyped = 0;
+            state.history = [];
+            state.wordStats = []; 
+            lastHistoryTime = 0; 
+            els.input.value = '';
+
+            // Generate Words
+            generateWords();
+            renderWords();
+
+            // Reset UI
+            els.timer.innerText = config.time;
+            els.wpm.innerText = '0';
+            els.acc.innerText = '100%'; 
+            els.statsContainer.classList.add('opacity-0');
+            els.configBar.classList.remove('opacity-0', 'pointer-events-none');
+            // Set left position to 0 for horizontal scrolling
+            els.wordContainer.style.left = '0px'; 
+            
+            // Reset Caret position
+            requestAnimationFrame(updateCaretPosition);
+            
+            // Close Modal if open
+            els.resultsModal.classList.add('hidden');
+            els.resultsModal.classList.remove('flex');
+            
+            // Re-show hint if not dismissed
+            showTabHint();
+            
+            // Focus
+            setTimeout(() => els.input.focus(), 10);
+        }
+
+        function generateWords() {
+            let list;
+            const lang = config.language;
+
+            // Select the appropriate list based on language and source
+            if (config.source === 'words') {
+                list = {
+                    'en': WORD_LIST, 
+                    'es': ES_WORD_LIST,
+                    'hi': HI_WORD_LIST,
+                    'fr': FR_WORD_LIST,
+                    'zh': ZH_WORD_LIST
+                }[lang] || WORD_LIST;
+            } else if (config.source === 'literature') {
+                list = {
+                    'en': LITERATURE_EXCERPTS, 
+                    'es': ES_LITERATURE_EXCERPTS,
+                    'hi': HI_LITERATURE_EXCERPTS,
+                    'fr': FR_LITERATURE_EXCERPTS,
+                    'zh': ZH_LITERATURE_EXCERPTS
+                }[lang] || LITERATURE_EXCERPTS;
+            } else if (config.source === 'code') {
+                list = {
+                    'en': CODING_SNIPPETS, 
+                    'es': CODING_SNIPPETS_ES,
+                    'hi': HI_CODING_SNIPPETS,
+                    'fr': FR_CODING_SNIPPETS,
+                    'zh': ZH_CODING_SNIPPETS
+                }[lang] || CODING_SNIPPETS;
+            } else {
+                list = WORD_LIST; // Fallback
+            }
+            
+            if (config.source === 'words') {
+                // Generate 150 random words
+                const numWords = 150;
+                const newWords = [];
+                let lastWord = null;
+
+                while (newWords.length < numWords) {
+                    let randomIndex = Math.floor(Math.random() * list.length);
+                    let newWord = list[randomIndex];
+
+                    // Only push if the new word is different from the last word
+                    if (newWord !== lastWord) {
+                        newWords.push(newWord);
+                        lastWord = newWord;
+                    }
+                }
+                state.words = newWords;
+            } else {
+                // Use shuffled excerpts
+                const shuffled = [...list].sort(() => 0.5 - Math.random());
+                // Join them and split by space to get word array (preserving punctuation attached to words)
+                state.words = shuffled.join(' ').split(' ').filter(w => w.length > 0);
+            }
+        }
+
+        function renderWords() {
+            els.wordContainer.innerHTML = state.words.map((word, wIdx) => {
+                const chars = word.split('').map((char, cIdx) => 
+                    `<span class="char" data-char="${char}">${char}</span>`
+                ).join('');
+                return `<div class="word" id="w-${wIdx}">${chars}</div>`;
+            }).join('');
+        }
+
+        function startTest() {
+            state.isRunning = true;
+            state.startTime = Date.now();
+            
+            els.statsContainer.classList.remove('opacity-0');
+            els.configBar.classList.add('opacity-0', 'pointer-events-none');
+            document.body.classList.add('is-typing');
+            
+            // Dismiss hint on start
+            dismissTabHint();
+            
+            // Initial stats calculation
+            updateLiveStats(); 
+
+            state.intervalId = setInterval(() => {
+                state.timeLeft--;
+                els.timer.innerText = state.timeLeft;
+                
+                // Recalculate and update WPM/Accuracy every second
+                updateLiveStats();
+
+                if (state.timeLeft <= 0) {
+                    endTest();
+                }
+            }, 1000);
+        }
+        
+        function updateLiveStats() {
+            if (!state.isRunning) return;
+            
+            const timeElapsedMs = Date.now() - state.startTime;
+            const timeElapsedMin = timeElapsedMs / 60000; 
+            
+            // WPM calculation (standard formula: (Correct Chars / 5) / Time in Minutes)
+            const netWpm = timeElapsedMin > 0 ? Math.round((state.correctChars / 5) / timeElapsedMin) : 0;
+            els.wpm.innerText = netWpm;
+
+            // Accuracy calculation
+            const totalKeystrokes = state.correctChars + state.incorrectChars; // Use accumulated state variables
+            const accuracy = totalKeystrokes > 0 ? Math.round((state.correctChars / totalKeystrokes) * 100) : 100;
+            els.acc.innerText = accuracy + '%';
+            
+            // History update (only runs once per second)
+            const currentTimeInSeconds = Math.floor(timeElapsedMs / 1000);
+            if (currentTimeInSeconds > lastHistoryTime) {
+                state.history.push(netWpm);
+                lastHistoryTime = currentTimeInSeconds;
+            }
+        }
+        
+        // --- NEW: BEFORE INPUT HANDLER FOR WORD BOUNDARY BACKSPACE ---
+        function handleBeforeInput(e) {
+            // Check for backspace keypress on an empty input field when not at the first word
+            if (e.inputType === 'deleteContentBackward' && els.input.value.length === 0 && state.wordIndex > 0) {
+                e.preventDefault(); // Stop the browser from deleting anything (it might try to delete the space)
+                
+                // 1. Mark the current word as un-finalized (removing any missed char penalties)
+                updateWordVisualsAndScores(state.wordIndex, '', false); 
+
+                // 2. Move back to the previous word
+                state.wordIndex--;
+                
+                // 3. Load previous word's typed text
+                const previousStats = state.wordStats[state.wordIndex];
+                const previousTypedText = previousStats ? previousStats.content : '';
+                els.input.value = previousTypedText;
+                state.charIndex = previousTypedText.length;
+                
+                // 4. Re-calculate visual state and scores for the newly current word
+                // This call effectively loads the state and ensures correct highlighting without 'finalize' penalties
+                updateWordVisualsAndScores(state.wordIndex, els.input.value, false); 
+
+                requestAnimationFrame(updateCaretPosition);
+                updateLiveStats();
+            }
+        }
+        
+        // --- MODIFIED INPUT HANDLER ---
+        function handleInput(e) {
+            if (!state.isRunning && state.timeLeft === config.time) {
+                startTest();
+            }
+
+            const inputVal = els.input.value;
+            const currentWord = state.words[state.wordIndex];
+            
+            // --- 1. Handle Space (Word Completion/Advance) ---
+            if (inputVal.endsWith(' ')) {
+                // Don't advance if input is just a space and we haven't typed the word yet
+                if (inputVal.trim().length === 0 && currentWord.length > 0) {
+                    els.input.value = '';
+                    state.charIndex = 0;
+                    requestAnimationFrame(updateCaretPosition);
+                    return;
+                }
+                
+                const typedContent = inputVal.trim();
+                
+                // Finalize the current word: marks missed chars as incorrect and updates score
+                updateWordVisualsAndScores(state.wordIndex, typedContent, true); 
+
+                state.wordIndex++;
+                state.charIndex = 0;
+                els.input.value = '';
+                
+                // Check for end of text before updating caret (which triggers scroll logic)
+                if (state.wordIndex >= state.words.length) {
+                    endTest();
+                    return;
+                }
+                
+            } else {
+                // --- 2. Handle Regular Typing/Backspacing within a word ---
+                // Just update visuals and scores for the current input
+                updateWordVisualsAndScores(state.wordIndex, inputVal);
+                state.charIndex = inputVal.length; // Always update char index to current input length
+            }
+            
+            requestAnimationFrame(updateCaretPosition); 
+            updateLiveStats();
+        }
+
+        // --- FIXED: CORE FUNCTION TO RECALCULATE WORD STATE AND GLOBAL SCORE ---
+        function updateWordVisualsAndScores(wIdx, typedText, finalize = false) {
+            const actualWord = state.words[wIdx];
+            const wordEl = document.getElementById(`w-${wIdx}`);
+            if (!wordEl) return;
+            
+            const expectedLength = actualWord.length;
+            const typedLength = typedText.length;
+
+            let wordCorrectChars = 0;
+            let wordIncorrectChars = 0;
+            let wordTotalTyped = 0;
+
+            // 1. Update character classification and count scores
+            const charEls = wordEl.querySelectorAll('.char:not(.extra-char)');
+            
+            // a. Process expected characters
+            for (let i = 0; i < expectedLength; i++) {
+                const charEl = charEls[i];
+                const charTyped = typedText[i];
+                const charExpected = actualWord[i];
+                
+                charEl.classList.remove('correct', 'incorrect');
+
+                if (i < typedLength) {
+                    // Character has been typed
+                    wordTotalTyped++;
+                    if (charTyped === charExpected) {
+                        charEl.classList.add('correct');
+                        wordCorrectChars++;
+                    } else {
+                        charEl.classList.add('incorrect');
+                        wordIncorrectChars++;
+                    }
+                } else if (finalize) {
+                    // Character was missed (only happens on space/finalize)
+                     charEl.classList.add('incorrect');
+                     wordIncorrectChars++;
+                }
+                // else: Character is untyped and not finalized (remains default color)
+            }
+            
+            // b. Handle excess characters (Remove all and re-add based on typedText)
+            wordEl.querySelectorAll('.char.extra-char').forEach(el => el.remove());
+            
+            if (typedLength > expectedLength) {
+                for (let i = expectedLength; i < typedLength; i++) {
+                    wordTotalTyped++;
+                    wordIncorrectChars++; // Excess chars are always incorrect
+                    
+                    const extraSpan = document.createElement('span');
+                    extraSpan.className = 'char extra-char';
+                    extraSpan.innerText = typedText[i];
+                    wordEl.appendChild(extraSpan);
+                }
+            }
+            
+            // 2. Store current word score/stats
+            state.wordStats[wIdx] = {
+                content: typedText,
+                correct: wordCorrectChars,
+                incorrect: wordIncorrectChars,
+                total: wordTotalTyped,
+                isFinalized: finalize
+            };
+            
+            // 3. Recalculate global scores (0 to current wordIndex)
+            state.correctChars = 0;
+            state.incorrectChars = 0;
+            state.totalTyped = 0;
+            
+            // Loop through all words that have been processed (i.e., are in wordStats)
+            for (let i = 0; i < state.wordStats.length; i++) {
+                const stats = state.wordStats[i];
+                
+                if (stats) {
+                    // Accumulate character stats from the word itself
+                    state.correctChars += stats.correct;
+                    state.incorrectChars += stats.incorrect;
+                    state.totalTyped += stats.total;
+
+                    // Space Logic: Only run if the word has been finalized (i.e., space was pressed)
+                    if (stats.isFinalized) {
+                        state.totalTyped++; // The space keystroke itself is counted
+                        
+                        // If the word was perfectly typed (stats.incorrect === 0), the space is counted as correct.
+                        if (stats.incorrect === 0) { 
+                            state.correctChars++; 
+                        } else {
+                            // If the word had errors, the space is penalized and counts as an incorrect character.
+                            state.incorrectChars++; 
+                        }
+                    }
+                }
+            }
+        }
+
+        function updateCaretPosition() {
+            try {
+                const wordEl = document.getElementById(`w-${state.wordIndex}`);
+                if (!wordEl) return;
+                
+                const wrapperRect = els.wordsWrapper.getBoundingClientRect();
+                
+                // Query all .char elements
+                const charEls = wordEl.querySelectorAll('.char'); 
+                let targetEl = charEls[state.charIndex]; 
+                
+                let rect;
+                let caretXAbsolute; // Absolute X position of the caret
+                
+                if (targetEl) {
+                    // Caret is positioned at the start of the next character
+                    rect = targetEl.getBoundingClientRect();
+                    caretXAbsolute = rect.left;
+                } else {
+                    // Caret is positioned after the last character
+                    const lastChar = wordEl.querySelector('.char:last-child');
+                    if (lastChar) {
+                        rect = lastChar.getBoundingClientRect();
+                        caretXAbsolute = rect.right; 
+                    } else {
+                        // Start of the word (for empty word/space edge case)
+                        rect = wordEl.getBoundingClientRect();
+                        caretXAbsolute = wordEl.getBoundingClientRect().left;
+                    }
+                }
+                
+                if (typeof caretXAbsolute === 'undefined') return; // Safety check
+
+                // 1. Position Caret (Relative to Wrapper)
+                // Y Position: Center it vertically (this matches the text's vertical centering)
+                els.caret.style.top = (wrapperRect.height / 2) + 'px'; 
+                // X Position: Caret's absolute X minus Wrapper's absolute X
+                els.caret.style.left = (caretXAbsolute - wrapperRect.left) + 'px'; 
+                
+                // 2. Horizontal Scrolling Logic
+                const targetXOffset = wrapperRect.width * 0.30; // Keep caret at 30% from the left edge
+                const caretXRelativeToWrapper = caretXAbsolute - wrapperRect.left;
+
+                let currentLeft = parseFloat(els.wordContainer.style.left || '0');
+                let newLeft = currentLeft;
+
+                // A. Scroll Left (Text moves right to left)
+                if (caretXRelativeToWrapper > targetXOffset) {
+                    // Calculate the required shift amount
+                    const shift = caretXRelativeToWrapper - targetXOffset;
+                    newLeft = currentLeft - shift;
+                } 
+                
+                // B. Scroll Right (Text moves left to right, happens on backspace)
+                const MIN_OFFSET = wrapperRect.width * 0.10; // Backspace trigger point
+                if (currentLeft < 0 && caretXRelativeToWrapper < MIN_OFFSET) {
+                    const reverseShift = MIN_OFFSET - caretXRelativeToWrapper;
+                    newLeft = currentLeft + reverseShift;
+                }
+                
+                // C. Clamp: Never allow scrolling past the beginning of the text (left > 0)
+                if (newLeft > 0) {
+                    newLeft = 0;
+                }
+
+                // Apply the new position
+                els.wordContainer.style.left = newLeft + 'px';
+
+            } catch (e) {
+                console.error("Caret update error:", e);
+            }
+        }
+
+        // --- END & STATS ---
+        function endTest() {
+            clearInterval(state.intervalId);
+            state.isRunning = false;
+            document.body.classList.remove('is-typing');
+            
+            showResults();
+        }
+
+        function showResults() {
+            els.resultsModal.classList.remove('hidden');
+            els.resultsModal.classList.add('flex');
+            
+            setTimeout(() => {
+                els.resultsContent.classList.remove('opacity-0', 'scale-95');
+                els.resultsContent.classList.add('opacity-100', 'scale-100');
+            }, 10);
+
+            const timeMin = config.time / 60;
+            
+            // --- UPDATED STATS CALCULATION ---
+            // Total Keystrokes (Correct + Incorrect)
+            const totalKeystrokes = state.correctChars + state.incorrectChars; 
+            
+            // Gross WPM counts total typed (correct chars + incorrect chars + excess chars + all spaces)
+            const grossWpm = Math.round((totalKeystrokes / 5) / timeMin);
+            
+            // Net WPM counts only correct chars (including correct spaces)
+            const netWpm = Math.round((state.correctChars / 5) / timeMin);
+            
+            const accuracy = totalKeystrokes > 0 ? Math.round((state.correctChars / totalKeystrokes) * 100) : 0;
+            // --- END UPDATED STATS CALCULATION ---
+            
+            const sourceText = getT(config.source);
+            els.resultModeText.innerText = getT('sourceModeText', sourceText, config.time);
+            
+            els.resWpm.innerText = netWpm;
+            els.resRaw.innerText = grossWpm;
+            els.resAcc.innerText = accuracy + '%';
+            els.resCharCorrect.innerText = state.correctChars;
+            
+            // Wrong chars are explicitly state.incorrectChars now, which includes penalized spaces.
+            els.resCharWrong.innerText = state.incorrectChars; 
+            
+            els.resCon.innerText = calculateConsistency(state.history) + '%';
+            
+            // Re-render raw label in case language changed
+            // This is crucial because renderUI is not called on result, so we manually update the translated text
+            els.resRawLabel.innerHTML = `${getT('rawWpm')}: <span id="res-raw">${grossWpm}</span>`;
+
+
+            renderChart(state.history);
+            
+            dismissTabHint(); // Ensure hint is dismissed after the first completion
+        }
+        
+        function calculateConsistency(arr) {
+            if (arr.length < 2) return 100;
+            const mean = arr.reduce((a, b) => a + b) / arr.length;
+            const variance = arr.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / arr.length;
+            const sd = Math.sqrt(variance);
+            
+            // Consistency = 100 - (Standard Deviation / Mean * 100)
+            const consistency = 100 - ((sd / mean) * 100);
+            return Math.max(0, Math.round(consistency));
+        }
+
+        function renderChart(data) {
+            const ctx = document.getElementById('wpmChart').getContext('2d');
+            const labels = data.map((_, i) => i + 1);
+
+            if (wpmChart) wpmChart.destroy();
+
+            wpmChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: getT('wpm'),
+                        data: data,
+                        borderColor: '#e6c88b',
+                        backgroundColor: 'rgba(230, 200, 139, 0.1)',
+                        borderWidth: 3,
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#253325' },
+                            ticks: { color: '#6b7d6b' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { display: false }
+                        }
+                    },
+                    animation: {
+                        duration: 1000
+                    }
+                }
+            });
+        }
+
+        function closeResults() {
+            els.resultsContent.classList.remove('opacity-100', 'scale-100');
+            els.resultsContent.classList.add('opacity-0', 'scale-95');
+            setTimeout(() => {
+                resetTest();
+            }, 300);
+        }
+
+        init();
+    </script>
+</body>
+</html>
