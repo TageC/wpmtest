@@ -1,0 +1,2 @@
+# wpmtest
+Minimalist typing test
